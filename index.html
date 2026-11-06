@@ -1,0 +1,185 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nova Proxy</title>
+<style>
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: #10131c;
+  color: white;
+  font-family: Arial, sans-serif;
+  min-height: 100vh;
+}
+header {
+  padding: 24px;
+  font-size: 24px;
+  font-weight: bold;
+  color: #65d6a5;
+}
+main {
+  max-width: 700px;
+  margin: 90px auto;
+  padding: 20px;
+  text-align: center;
+}
+h1 { font-size: 48px; margin-bottom: 10px; }
+p { color: #aab2c5; }
+.search {
+  display: flex;
+  gap: 8px;
+  margin: 30px 0;
+}
+input {
+  flex: 1;
+  min-width: 0;
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid #343b4c;
+  background: #1c2230;
+  color: white;
+  font-size: 16px;
+}
+button {
+  padding: 14px 20px;
+  background: #55c995;
+  color: #07150e;
+  border: 0;
+  border-radius: 12px;
+  font-weight: bold;
+  cursor: pointer;
+}
+.result {
+  text-align: left;
+  background: #1c2230;
+  padding: 18px;
+  border-radius: 12px;
+  margin: 12px 0;
+}
+.result a { color: #65d6a5; }
+.result p { line-height: 1.5; }
+#status { margin: 20px; }
+</style>
+</head>
+<body>
+<header>✦ NOVA PROXY</header>
+
+<main>
+  <h1>Explore the web.</h1>
+  <p>Search privately with DuckDuckGo.</p>
+
+  <form class="search" id="searchForm">
+    <input id="query" placeholder="Search anything..." required>
+    <button type="submit">Search</button>
+  </form>
+
+  <div class="search">
+    <input id="browseUrl" placeholder="Enter a website URL...">
+    <button onclick="browse()">Go</button>
+  </div>
+
+  <div id="status"></div>
+  <section id="results"></section>
+</main>
+
+<script>
+const WORKER_URL = "https://duckduckgoproxy.hikehsieh83.worker.dev";
+
+const form = document.getElementById("searchForm");
+const statusBox = document.getElementById("status");
+const resultsBox = document.getElementById("results");
+
+form.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  const query = document.getElementById("query").value.trim();
+  if (!query) return;
+
+  resultsBox.innerHTML = "";
+  statusBox.textContent = "Searching DuckDuckGo...";
+
+  try {
+    const response = await fetch(
+      WORKER_URL + "/search?q=" + encodeURIComponent(query)
+    );
+
+    if (!response.ok) throw new Error("Search failed: " + response.status);
+
+    const html = await response.text();
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const links = doc.querySelectorAll(".result__a");
+
+    if (!links.length) {
+      statusBox.textContent = "No results found. Try another search.";
+      return;
+    }
+
+    statusBox.textContent = links.length + " results found.";
+
+    links.forEach((link) => {
+      let destination = link.href;
+
+      try {
+        const parsed = new URL(destination);
+        const redirect = parsed.searchParams.get("uddg");
+        if (redirect) destination = redirect;
+      } catch {}
+
+      if (!/^https?:\/\//i.test(destination)) return;
+
+      const card = document.createElement("article");
+      card.className = "result";
+
+      const title = document.createElement("a");
+      title.textContent = link.textContent.trim();
+      title.href = WORKER_URL + "/browse?url=" +
+        encodeURIComponent(destination);
+      title.target = "_blank";
+      title.rel = "noopener noreferrer";
+
+      card.appendChild(title);
+
+      const snippet = link.closest(".result")
+        ?.querySelector(".result__snippet");
+
+      if (snippet) {
+        const description = document.createElement("p");
+        description.textContent = snippet.textContent.trim();
+        card.appendChild(description);
+      }
+
+      resultsBox.appendChild(card);
+    });
+
+  } catch (error) {
+    statusBox.textContent = "Search error: " + error.message;
+  }
+});
+
+function browse() {
+  let address = document.getElementById("browseUrl").value.trim();
+  if (!address) return;
+
+  if (!/^https?:\/\//i.test(address)) {
+    address = "https://" + address;
+  }
+
+  try {
+    const url = new URL(address);
+    if (!["http:", "https:"].includes(url.protocol)) return;
+
+    window.open(
+      WORKER_URL + "/browse?url=" + encodeURIComponent(url.href),
+      "_blank",
+      "noopener"
+    );
+  } catch {
+    statusBox.textContent = "Invalid website address.";
+  }
+}
+</script>
+</body>
+</html>
